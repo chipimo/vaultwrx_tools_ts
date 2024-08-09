@@ -1,62 +1,35 @@
-import { tmpdir } from "os";
-import { join } from "path";
-import config from "./config/config";
-import { Statement } from "./model";
-
-const admin = require("firebase-admin");
-
-// Initialize Firebase Admin SDK
-const serviceAccount = require("./dev_config/serviceAccountKeyDev.json");
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
 // const bucket = admin
 //   .storage()
 //   .bucket("gs://" + config.vaultWrx.domain + ".appspot.com/");
 
+import { createInvoice } from "./retailerInvoice";
+
 export async function generatePDFs(
-    dataArray,
-    templateName,
-    userType,
-    fileType
-  ) {
-    const promises = [];
-    const options = {
-      // format: 'A4',
-      printBackground: true,
-      timeout: 6000000,
-    };
-    // const localTemplatePath = join(
-    //   tmpdir(),
-    //   `${fileType}-localTemplate.${userType}.html`
-    // );
-  
-    try {
+  dataArray: any,
+  templateName: string,
+  userType: string,
+  fileType: string
+) {
+  // const localTemplatePath = join(
+  //   tmpdir(),
+  //   `${fileType}-localTemplate.${userType}.html`
+  // );
+
+  try {
+    console.log(dataArray);
+
+    // return dataArray;
     //   await bucket.file(`templates/${templateName}`).download({ destination: localTemplatePath });
     //   const source = readFileSync(localTemplatePath, 'utf8');
-      const statements = [];
-  
-      for (const data of dataArray) {
-        if (data.data.grandTotal !== 0) {
-        //   const html = handlebars.compile(source)(data);
-  
-          promises.push(
-            (async () => {
-              try {
-               
-                console.log(data);
-              } catch (error) {
-                console.error('PDF creation error:', error);
-                throw error;
-              }
-            })()
-          );
-        }
+    
+    for (const data of dataArray) {
+      if (data.data.grandTotal !== 0) {
+        createInvoice(data);
       }
-  
-      await Promise.all(promises);
-    } catch (err) {
-      console.error(err);
     }
+
+    // await Promise.all(promises);
+  } catch (err) {
+    console.error(err);
   }
+}

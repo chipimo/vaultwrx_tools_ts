@@ -1,11 +1,30 @@
-const express = require('express')
-const app = express()
-const port = 3400
+import express from 'express';
+import morgan from 'morgan';
+import helmet from 'helmet';
+import cors from 'cors';
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
+import * as middlewares from './middlewares';
+import api from './api';
+import MessageResponse from './interfaces/MessageResponse';
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
+require('dotenv').config();
+
+const app = express();
+
+app.use(morgan('dev'));
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+
+app.get<{}, MessageResponse>('/', (req, res) => {
+  res.json({
+    message: '🦄🌈✨👋🌎🌍🌏✨🌈🦄',
+  });
+});
+
+app.use('/api/v1', api);
+
+app.use(middlewares.notFound);
+app.use(middlewares.errorHandler);
+
+export default app;
