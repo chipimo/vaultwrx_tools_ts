@@ -1,4 +1,6 @@
 import { generateAdminStatements } from "./GenerateAdminStatements";
+import { generateCustomerStatements } from "./GenerateCustomerStatements";
+import { generateRetailerStatements } from "./GenerateRetailerStatements";
 
 interface StatementProps {
   admin: boolean;

@@ -1,25 +1,50 @@
-import { config as cloudConfig } from "firebase-functions";
-import { FirebaseConfig } from "../model/index";
+import dotenv from 'dotenv';
 
+// Load environment variables from .env file
+dotenv.config();
+
+// Define the types for the configuration
+interface FirebaseConfig {
+  vaultWrx: {
+    domain: string;
+    appUrl: string;
+  };
+  twillio: {
+    number: string;
+    accountSid: string;
+    authToken: string;
+  };
+  ringCentral: {
+    serverUrl: string;
+    clientId: string;
+    clientSecret: string;
+    username: string;
+    password: string;
+  };
+  stripeApiKey: string;
+  sendgridApiKey: string;
+}
+
+// Load the configuration from environment variables
 const config: FirebaseConfig = {
   vaultWrx: {
-    domain: cloudConfig().vaultwrx.domain,
-    appUrl: cloudConfig().vaultwrx.appurl
+    domain: process.env.VAULTWRX_DOMAIN!,
+    appUrl: process.env.VAULTWRX_APPURL!,
   },
   twillio: {
-    number: cloudConfig().twillio.number,
-    accountSid: cloudConfig().twillio.accountsid,
-    authToken: cloudConfig().twillio.authtoken
+    number: process.env.TWILLIO_NUMBER!,
+    accountSid: process.env.TWILLIO_ACCOUNTSID!,
+    authToken: process.env.TWILLIO_AUTHTOKEN!,
   },
   ringCentral: {
-    serverUrl: cloudConfig().ringcentral.serverurl,
-    clientId: cloudConfig().ringcentral.clientid,
-    clientSecret: cloudConfig().ringcentral.clientsecret,
-    username: cloudConfig().ringcentral.username,
-    password: cloudConfig().ringcentral.password
+    serverUrl: process.env.RINGCENTRAL_SERVERURL!,
+    clientId: process.env.RINGCENTRAL_CLIENTID!,
+    clientSecret: process.env.RINGCENTRAL_CLIENTSECRET!,
+    username: process.env.RINGCENTRAL_USERNAME!,
+    password: process.env.RINGCENTRAL_PASSWORD!,
   },
-  stripeApiKey: cloudConfig().stripe.apikey,
-  sendgridApiKey: cloudConfig().sendgrid.key
-}
+  stripeApiKey: process.env.STRIPE_APIKEY!,
+  sendgridApiKey: process.env.SENDGRID_APIKEY!,
+};
 
 export default config;
