@@ -22,11 +22,11 @@ export async function generatePDFs(
     //   await bucket.file(`templates/${templateName}`).download({ destination: localTemplatePath });
     //   const source = readFileSync(localTemplatePath, 'utf8');
     
-    for (const data of dataArray) {
+    dataArray.forEach((data:any) => {
       if (data.data.grandTotal !== 0) {
         createInvoice(data);
       }
-    }
+    });
 
     // await Promise.all(promises);
   } catch (err) {
