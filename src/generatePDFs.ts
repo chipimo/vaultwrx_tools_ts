@@ -2,7 +2,7 @@
 //   .storage()
 //   .bucket("gs://" + config.vaultWrx.domain + ".appspot.com/");
 
-import { createInvoice } from "./retailerInvoice";
+import { createInvoice } from './retailerInvoice';
 
 export async function generatePDFs(
   dataArray: any,

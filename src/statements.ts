@@ -1,4 +1,5 @@
 import { generateAdminStatements } from './GenerateAdminStatements';
+import { generateAdminInvoices } from './generatePDFInvoices';
 // import { generateCustomerStatements } from './GenerateCustomerStatements';
 // import { generateRetailerStatements } from './GenerateRetailerStatements';
 
@@ -15,9 +16,12 @@ export const onRequestGenerateStatements = async (props: StatementProps) => {
   const { date, admin, customer, retailer } = props;
 
   if (admin) {
-    await generateAdminStatements(date).catch((error: any) => {
+    await generateAdminInvoices(date).catch((error: any) => {
       console.log(error);
     });
+    // await generateAdminStatements(date).catch((error: any) => {
+    //   console.log(error);
+    // });
   }
   if (customer) {
     // await generateCustomerStatements(date, customerId).catch((error: any) => {
