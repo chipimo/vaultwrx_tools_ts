@@ -393,37 +393,62 @@ function generatePDFs(
               doc.moveDown();
 
               if (fileType === 'detailed-invoices') {
-                // Define a detailed table for detailed invoices with a link in the description
+                // Define the table headers and rows based on your data
                 table = {
-                  headers: ['Delivery', 'Customer', 'Description', 'Price'],
-                  rows: [
-                    ['Date', data.month],
-                    ['Description', data.data.description],
-                    ['platformFee', data.data.platformFee],
-                    ['platformFee', data.data.platformFee],
-                  ],
+                  headers: ['Date', 'Customer', 'Description', 'Amount', 'Platform Fee'],
+                  rows: data.data.orders.map((order) => [
+                    order.delivery,
+                    order.customer,
+                    {
+                      label: `${order.description}`, // Link text
+                      url: order.url, // Link URL
+                    },
+                    `$${order.price.toFixed(2)}`,
+                    `$${order.platformFee.toFixed(2)}`,
+                  ]),
                 };
+
+                // Add footer with total values
+                const footerRow = [
+                  '',
+                  '',
+                  'Total',
+                  `$${data.data.grandTotal.toFixed(2)}`,
+                  `$${data.data.platformFee.toFixed(2)}`,
+                ];
+
+                table.rows.push(footerRow); // Add footer row to the table
+
+                // Add the table to the document
+                doc.table(table, {
+                  width: 550, // Define width, optional
+                });
               } else {
                 // Define a simpler table for other file types
                 table = {
                   headers: ['Date', 'Description', 'platformFee'],
-                  rows: data.data.orders.map((item) => [
-                    item.delivery,
-                    item.description,
-                    item.platformFee,
+                  rows: data.data.orders.map((order) => [
+                    order.delivery,
+                    order.description,
+                    `$${order.platformFee.toFixed(2)}`,
                   ]),
                 };
 
-                doc.table(table);
+                // Add footer with total values
+                const footerRow = [
+                  '',
+                  '',
+                  '',
+                  'Total',
+                  `$${data.data.platformFee.toFixed(2)}`,
+                ];
 
-                doc
-                  .fontSize(12)
-                  .text(
-                    `Total: $${data.data.platformFee}`,
-                    {
-                      align: 'right',
-                    },
-                  );
+                table.rows.push(footerRow); // Add footer row to the table
+
+                doc.table(table, {
+                  width: 550, // Define width, optional
+                });
+
               }
 
               // End the document
