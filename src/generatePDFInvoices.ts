@@ -1,5 +1,4 @@
 import moment from 'moment';
-import { total } from './utils';
 const PDFDocument = require('pdfkit-table');
 const fs = require('fs');
 const admin = require('firebase-admin');
@@ -89,7 +88,7 @@ export const generateAdminInvoices = async (inputDate: Date) => {
       )}.pdf`;
       doc.pipe(fs.createWriteStream(fileName));
 
-      // Add full datestamp in the top right corner
+      // Add full date stamp in the top right corner
       doc
         .fontSize(10)
         .text(`Generated on: ${moment().format('MMMM Do YYYY, h:mm:ss a')}`, {
