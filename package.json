@@ -19,12 +19,14 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "firebase-admin": "^12.3.0",
+    "handlebars": "^4.7.8",
     "helmet": "^7.1.0",
     "moment": "^2.30.1",
     "moment-timezone": "^0.5.45",
     "morgan": "^1.10.0",
     "pdfkit": "^0.15.0",
-    "pdfkit-table": "^0.1.99"
+    "pdfkit-table": "^0.1.99",
+    "puppeteer": "^23.4.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

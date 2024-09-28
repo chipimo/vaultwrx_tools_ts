@@ -18,6 +18,8 @@ import {
 import * as admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 import moment from 'moment-timezone';
+import handlebars from 'handlebars';
+import puppeteer from 'puppeteer';
 import { formatDate, formatTime, total } from '.';
 import config from '../config/config';
 
@@ -25,8 +27,11 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit-table');
 
-// Initialize Firebase Admin SDK
 const serviceAccount = require('../dev_config/serviceAccountKeyDev.json');
+// !! PRODUCTION
+// const serviceAccount = require('../prod_config/serviceAccountKeyProd.json');
+const isProduction = true;
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -37,23 +42,23 @@ const bucket = admin
 
 // const pdf = require('html-pdf');
 
-// const currencyFormatter = new Intl.NumberFormat('en-US', {
-//   style: 'currency',
-//   currency: 'USD',
-// });
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
 
-// handlebars.registerHelper('link', (text, url) => {
-//   const urlString = handlebars.escapeExpression(url);
-//   const textString = handlebars.escapeExpression(text);
-//   return new handlebars.SafeString(
-//     `<a target="_blank" href="${urlString}">${textString}</a>`,
-//   );
-// });
+handlebars.registerHelper('link', (text, url) => {
+  const urlString = handlebars.escapeExpression(url);
+  const textString = handlebars.escapeExpression(text);
+  return new handlebars.SafeString(
+    `<a target="_blank" href="${urlString}">${textString}</a>`,
+  );
+});
 
-// handlebars.registerHelper('currency', (number) => {
-//   const numberString = handlebars.escapeExpression(number);
-//   return currencyFormatter.format(+numberString);
-// });
+handlebars.registerHelper('currency', (number) => {
+  const numberString = handlebars.escapeExpression(number);
+  return currencyFormatter.format(+numberString);
+});
 
 export const generatePDFDataFromOrder = (
   order: Order,
@@ -343,189 +348,121 @@ function generatePDFs(
       const statements: any[] = [];
 
       dataArray.forEach((data) => {
+        
         if (data.data.grandTotal !== 0) {
           promises.push(
-            new Promise((resolve2, reject2) => {
-              // Create a new PDF document
-              const doc = new PDFDocument({ margin: 10 });
-
-              // Collect the file path
+            new Promise(async (resolve2, reject2) => {
+              const html = handlebars.compile(source)(data);
+              // Create a new PDF document in memory
+      
+              //Use storage bucket to save PDF
               let statementPath = `${fileType}/${data.name} - ${data.month}.pdf`;
-              let jsonPath = `${fileType}/${data.name} - ${data.month}.json`;
-
               if (data.location) {
-                statementPath = `${fileType}/${data.name}: ${data.location.name} - ${data.month}.pdf`;
+                statementPath = `${fileType}/${data.name}: ${data.location.name} - ${data.month}`;
               }
               if (fileType === 'detailed-invoices') {
-                statementPath = `invoices/detailed/${data.name} - ${data.month}.pdf`;
-                jsonPath = `invoices/detailed/${data.name} - ${data.month}.json`;
+                statementPath = `invoices/detailed/${data.name} - ${data.month}`;
               }
+      
+              // Launch Puppeteer and generate PDF
+              const browser = await puppeteer.launch();
+              const page = await browser.newPage();
+              await page.setContent(html);
 
-              // Ensure the directory exists
-              const directory = path.dirname(statementPath);
-              if (!fs.existsSync(directory)) {
-                fs.mkdirSync(directory, { recursive: true });
-              }
-
-              // Define the table based on fileType
-              let table;
-              // Create a write stream for the PDF
-              const writeStream = fs.createWriteStream(statementPath);
-              doc.pipe(writeStream);
-
-              // Add full date stamp in the top right corner
-              doc
-                .fontSize(9)
-                .text(
-                  `${moment().format('MMMM Do YYYY, h:mm:ss a')}`,
-                  450,
-                  50,
-                  {
-                    align: 'right',
-                  },
-                );
-
-              // Add header for the retailer's invoice with retailer details and the full month name
-             
-              doc.fontSize(14).text(`${data.name} - ${data.month}`, 50, 100, {
-                align: 'left',
+              // Generate PDF buffer
+              const pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
               });
-              doc.moveDown();
+              await browser.close();
 
-              if (fileType === 'detailed-invoices') {
-                // Define the table headers and rows based on your data
-                table = {
-                  headers: ['Date', 'Customer', 'Description', 'Amount', 'Platform Fee'],
-                  rows: data.data.orders.map((order) => [
-                    order.delivery,
-                    order.customer,
-                    {
-                      label: `${order.description}`, // Link text
-                      url: order.url, // Link URL
+              // Save the PDF to the Google Cloud Storage bucket
+              const statementPdfRef = bucket.file(statementPath);
+              const savePromise = statementPdfRef
+                .save(pdfBuffer)
+                .catch((e) => console.log(`Error saving PDF to bucket: ${e}`));
+                
+              savePromise.then(() => {
+                // Set metadata for the file in the bucket
+                bucket
+                  .file(statementPath)
+                  .setMetadata({
+                    contentType: 'application/pdf',
+                    metadata: {
+                      customer: data.name,
+                      retailer: data.name,
+                      date: data.month,
                     },
-                    `$${order.price.toFixed(2)}`,
-                    `$${order.platformFee.toFixed(2)}`,
-                  ]),
-                };
-
-                // Add footer with total values
-                const footerRow = [
-                  '',
-                  '',
-                  'Total',
-                  `$${data.data.grandTotal.toFixed(2)}`,
-                  `$${data.data.platformFee.toFixed(2)}`,
-                ];
-
-                table.rows.push(footerRow); // Add footer row to the table
-
-                // Add the table to the document
-                doc.table(table, {
-                  width: 550, // Define width, optional
-                });
-              } else {
-                // Define a simpler table for other file types
-                table = {
-                  headers: ['Date', 'Description', 'platformFee'],
-                  rows: data.data.orders.map((order) => [
-                    order.delivery,
-                    order.description,
-                    `$${order.platformFee.toFixed(2)}`,
-                  ]),
-                };
-
-                // Add footer with total values
-                const footerRow = [
-                  '',
-                  '',
-                  '',
-                  'Total',
-                  `$${data.data.platformFee.toFixed(2)}`,
-                ];
-
-                table.rows.push(footerRow); // Add footer row to the table
-
-                doc.table(table, {
-                  width: 550, // Define width, optional
-                });
-
-              }
-
-              // End the document
-              doc.end();
-
-              // Resolve once the file is written
-              writeStream.on('finish', () => {
-                console.log(`PDF saved successfully at ${statementPath}`);
-
-                // You can perform further actions here, like logging the statement or updating the database if needed
-                const statement: Statement = {
-                  date: data.month,
-                  path: statementPath,
-                };
-                statements.push(statement);
-
-                // Handle based on user type (admin, retailer, customer)
-                if (userType === 'admin') {
-                  if (data.retailerRef) {
-                    statement.retailerRef = data.retailerRef;
-                  }
-                  if (fileType === 'detailed-invoices') {
-                    resolve2(
-                      admin
-                        .firestore()
-                        .doc(`temp/${data.retailerRef.id}`)
-                        .set({
-                          detailedInvoices: statements,
-                        })
-                        .catch((e) => console.log(e)),
-                    );
-                  } else {
-                    resolve2(
-                      admin
-                        .firestore()
-                        .doc('admins/vaultwrx')
-                        .update({
-                          [fileType]:
-                            admin.firestore.FieldValue.arrayUnion(statement),
-                        })
-                        .then(() => console.log('success'))
-                        .catch((e) => console.log(`error ${e}`)),
-                    );
-                  }
-                }
-
-                if (userType === 'retailer') {
-                  resolve2(
-                    data.retailerRef
-                      .update({
-                        [fileType]:
-                          admin.firestore.FieldValue.arrayUnion(statement),
-                      })
-                      .then(() => console.log('success'))
-                      .catch((err) => console.log(`error ${err}`)),
-                  );
-                }
-
-                if (userType === 'customer') {
-                  resolve2(
-                    data.customerRef
-                      .update({
-                        statements:
-                          admin.firestore.FieldValue.arrayUnion(statement),
-                      })
-                      .then(() => console.log('success'))
-                      .catch((err) => console.log(`error ${err}`)),
-                  );
-                }
-
-                console.log('saved pdf');
+                  })
+                  .then(() => {
+                    const statement: Statement = {
+                      date: data.month,
+                      path: statementPath,
+                    };
+                    statements.push(statement);
+      
+                    // Handle saving to Firestore based on user type
+                    if (userType === 'admin') {
+                      if (data.retailerRef) {
+                        statement.retailerRef = data.retailerRef;
+                      }
+                      if (fileType === 'detailed-invoices') {
+                        resolve2(
+                          admin
+                            .firestore()
+                            .doc(`temp/${data.retailerRef.id}`)
+                            .set({
+                              detailedInvoices: statements,
+                            })
+                            .catch((e) => console.log(e)),
+                        );
+                      } else {
+                        resolve2(
+                          admin
+                            .firestore()
+                            .doc('admins/vaultwrx')
+                            .update({
+                              [fileType]: admin.firestore.FieldValue.arrayUnion(
+                                statement,
+                              ),
+                            })
+                            .then(() => console.log('success'))
+                            .catch((e) => console.log(`error ${e}`)),
+                        );
+                      }
+                    } else if (userType === 'retailer') {
+                      resolve2(
+                        data.retailerRef
+                          .update({
+                            [fileType]: admin.firestore.FieldValue.arrayUnion(
+                              statement,
+                            ),
+                          })
+                          .then(() => console.log('success'))
+                          .catch((err) => console.log(`error ${err}`)),
+                      );
+                    } else if (userType === 'customer') {
+                      resolve2(
+                        data.customerRef
+                          .update({
+                            statements: admin.firestore.FieldValue.arrayUnion(
+                              statement,
+                            ),
+                          })
+                          .then(() => console.log('success'))
+                          .catch((err) => console.log(`error ${err}`)),
+                      );
+                    }
+      
+                    console.log('PDF saved and metadata set in bucket');
+                  })
+                  .catch((err) => {
+                    console.log(`Error setting metadata in bucket: ${err}`);
+                    reject2(err);
+                  });
               });
-
-              writeStream.on('error', (err: any) => {
-                console.log(`Error writing PDF to ${statementPath}:`, err);
-                reject2(err); // Reject the promise if there is an error
-              });
+    
             }).catch((err) => console.log(err)),
           );
         }

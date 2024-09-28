@@ -28,8 +28,8 @@ interface FirebaseConfig {
 // Load the configuration from environment variables
 const config: FirebaseConfig = {
   vaultWrx: {
-    domain: 'vaults-online-dev',
-    appUrl: 'https://dev.vaultwrx.com',
+    domain: 'vaults-online',
+    appUrl: 'https://app.vaultwrx.com',
   },
   twillio: {
     number: process.env.TWILLIO_NUMBER!,

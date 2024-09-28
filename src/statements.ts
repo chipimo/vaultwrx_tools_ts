@@ -23,8 +23,6 @@ export const onRequestGenerateStatements = async (props: StatementProps) => {
     retailer: boolean;
   } = { admin, customer, retailer };
   if (!date || !roles) {
-    console.log("Fields 'date' and 'roles' are required");
-    
     return ({ error: "Fields 'date' and 'roles' are required" });
   }
   if (roles.admin) {
