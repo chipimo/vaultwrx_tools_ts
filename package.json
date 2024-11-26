@@ -24,6 +24,7 @@
     "moment": "^2.30.1",
     "moment-timezone": "^0.5.45",
     "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
     "pdfkit": "^0.15.0",
     "pdfkit-table": "^0.1.99",
     "puppeteer": "^23.4.1"
@@ -34,6 +35,7 @@
     "@types/jest": "^29.5.12",
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.14.10",
+    "@types/node-cron": "^3.0.11",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^7.16.1",
     "@typescript-eslint/parser": "^7.16.1",

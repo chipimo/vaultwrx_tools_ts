@@ -1,46 +1,34 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { tmpdir } from 'os';
-import { join } from 'path';
 // import { formatDate, formatTime, total } from '.';
 import {
   Customer,
-  DetailedInvoice,
-  Option,
   Order,
   OrderStatement,
-  PDFData,
   Retailer,
-  Staff,
-  Statement,
   StatementData,
 } from '../model';
-// import config from './config';
 import * as admin from 'firebase-admin';
-import { readFileSync } from 'fs';
 import moment from 'moment-timezone';
 import handlebars from 'handlebars';
-import puppeteer from 'puppeteer';
-import { formatDate, formatTime, total } from '.';
+import { formatDate, total } from '.';
 import config from '../config/config';
+import { formatAdminOrdersForReport } from './formatAdminOrdersForReport';
+import { formatCustomersForReport } from './formatCustomersForReport';
+import { generatePDFs } from './generatePDFs';
 
-const fs = require('fs');
-const path = require('path');
-const PDFDocument = require('pdfkit-table');
-
-const serviceAccount = require('../dev_config/serviceAccountKeyDev.json');
+// const serviceAccount = require('../dev_config/serviceAccountKeyDev.json');
 // !! PRODUCTION
-// const serviceAccount = require('../prod_config/serviceAccountKeyProd.json');
-const isProduction = true;
+const serviceAccount = require('../prod_config/serviceAccountKeyProd.json');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-const bucket = admin
+export const bucket = admin
   .storage()
   .bucket('gs://' + config.vaultWrx.domain + '.appspot.com/');
 
-// const pdf = require('html-pdf');
+export const db = admin;
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -60,101 +48,7 @@ handlebars.registerHelper('currency', (number) => {
   return currencyFormatter.format(+numberString);
 });
 
-export const generatePDFDataFromOrder = (
-  order: Order,
-  customer: Customer,
-  retailer: Retailer,
-  director: Staff,
-  heading: string,
-  subjectPrefix: string = '',
-) => {
-  let data: PDFData = {
-    heading: heading,
-    id: order.id,
-    contact: director.name,
-    email: director.email,
-    cellPhone: director.cellPhone,
-    dateOfService: formatDate(order.dateOfService),
-    comments: order.comments,
-    retailer: false,
-    showConfirm: false,
-    customerName: customer.name,
-    retailerFax: retailer.fax,
-    showPrice: false,
-    salesTax: order.salesTax,
-  };
-  let subject = 'Bulk Vault Order';
-  if (!order.items) {
-    subject = `${subjectPrefix} ${order.name} Vault Order`;
-    data = {
-      ...data,
-      subject: subject,
-      name: order.name,
-      arrivalTime: formatTime(order.arrivalTime),
-      timeOfService: formatTime(order.timeOfService),
-      birthYear: order.birthDate.year.toString(),
-      cemetery: order.cemetery,
-      deathYear: order.deathDate.year.toString(),
-      location: order.location,
-      productPaintColorOptions: order.productPaintColorOptions,
-      emblem: order.emblem,
-      productOptions: order.productOptions,
-      salesTax: order.salesTax,
-      serviceExtras: order.serviceExtras,
-      extraCharges: order.extraCharges,
-      serviceType: order.serviceType,
-      bulk: false,
-    };
-  } else {
-    data.subject = subject;
-    data.bulk = true;
-    data.items = order.items;
-  }
-  return data;
-};
-
-const sum = (result: number, item: number) => result + item;
-
-function formatCustomersForReport(array: StatementData[]) {
-  let customers: StatementData[] = [];
-  let balance = 0;
-  let paid = 0;
-  let platformFee = 0;
-  let grandTotal = 0;
-  let salesTax = 0;
-  if (array && array.length) {
-    customers = array;
-    balance = customers
-      .map((customer) => +customer.data.balance)
-      .reduce(sum, 0);
-    paid = customers.map((customer) => +customer.data.paid).reduce(sum, 0);
-    salesTax = customers
-      .map((customer) => +customer.data.salesTax)
-      .reduce(sum, 0);
-    platformFee = customers
-      .map((customer) => +customer.data.platformFee)
-      .reduce(sum, 0);
-    grandTotal = customers
-      .map((customer) => +customer.data.grandTotal)
-      .reduce(sum, 0);
-  }
-  return {
-    customers: customers.sort((a, b) => {
-      if (a.name > b.name) {
-        return 1;
-      }
-      if (a.name < b.name) {
-        return -1;
-      }
-      return 0;
-    }),
-    balance,
-    paid,
-    grandTotal,
-    platformFee,
-    salesTax,
-  };
-}
+export const sum = (result: number, item: number) => result + item;
 
 function formatRetailersForReport(array: StatementData[]) {
   let customers: StatementData[] = [];
@@ -212,7 +106,7 @@ function formatOrdersForReport(array: Order[], discount: number) {
   return { orders, balance, paid, platformFee, grandTotal, salesTax };
 }
 
-const ordersGroupedByDay = (array: Order[]) => {
+export const ordersGroupedByDay = (array: Order[]) => {
   return array.reduce((result: any, item): any => {
     result[item.dateOfService.day] = result[item.dateOfService.day] || [];
     result[item.dateOfService.day].push(item);
@@ -249,227 +143,6 @@ function formatAdminDetailedOrdersForReport(
     platformFeeTotal = orders.map((order) => +order.platformFee).reduce(sum, 0);
   }
   return { orders, platformFee: platformFeeTotal, grandTotal, salesTax };
-}
-
-async function formatAdminOrdersForReport(array: Order[], retailerId: string) {
-  try {
-    const orders: OrderStatement[] = [];
-    let platformFeeTotal = 0;
-    let grandTotal = 0;
-    const salesTax = 0;
-    if (array && array.length) {
-      const groupedByDay = ordersGroupedByDay(array);
-      for (const day of Object.keys(groupedByDay)) {
-        const groupedOrders = groupedByDay[day] as Order[];
-        if (groupedOrders) {
-          const extraCharges = [].concat(
-            ...groupedOrders.map((o) => o.extraCharges).filter((c) => c),
-          ) as Option[];
-          const platformFee = extraCharges
-            .map((c) => {
-              if (c.name === 'Platform Fee') {
-                return +c.price;
-              }
-              return 0;
-            })
-            .reduce(sum, 0);
-          const documentSnapshot = await admin
-            .firestore()
-            .doc(`temp/${retailerId}`)
-            .get();
-          const detailedInvoice = documentSnapshot.data() as DetailedInvoice;
-          const delivery = formatDate(
-            groupedOrders[0].dateOfService,
-            'MM/DD/YYYY',
-          );
-          const invoice = detailedInvoice?.detailedInvoices.find(
-            (i) => i.date === delivery,
-          );
-          if (invoice) {
-            const signedUrls = await bucket.file(invoice.path).getSignedUrl({
-              action: 'read',
-              expires: moment().add(1, 'year').toDate(),
-            });
-            orders.push({
-              delivery,
-              description: `${groupedOrders.length} orders`,
-              url: signedUrls[0],
-              price: groupedOrders
-                .map((order) => {
-                  const orderTotal = total(order) / 100;
-                  const platformFeeCharge = order.extraCharges
-                    ? +order.extraCharges.filter(
-                      (c) => c.name === 'Platform Fee',
-                    )[0]?.price
-                    : 0;
-                  return order.applyPlatformFee
-                    ? orderTotal
-                    : orderTotal - platformFeeCharge;
-                })
-                .reduce(sum, 0),
-              salesTax: orders.map((order) => +order.salesTax).reduce(sum, 0),
-              platformFee,
-            });
-          }
-        }
-      }
-      grandTotal = orders.map((order) => +order.price).reduce(sum, 0);
-      platformFeeTotal = orders
-        .map((order) => +order.platformFee)
-        .reduce(sum, 0);
-    }
-    return { orders, platformFee: platformFeeTotal, grandTotal, salesTax };
-  } catch (err) {
-    throw err;
-  }
-}
-
-function generatePDFs(
-  dataArray: StatementData[],
-  templateName: string,
-  userType: 'admin' | 'retailer' | 'customer',
-  fileType: 'invoices' | 'statements' | 'detailed-invoices',
-) {
-  const promises: any[] = [];
-  const options = {
-    format: 'A4',
-    orientation: 'portrait',
-    timeout: 6000000,
-  };
-  const localTemplatePath = join(
-    tmpdir(),
-    `${fileType}-localTemplate.${userType}.html`,
-  );
-  return bucket
-    .file(`templates/${templateName}`)
-    .download({ destination: localTemplatePath })
-    .then(() => {
-      const source = readFileSync(localTemplatePath, 'utf8');
-      const statements: any[] = [];
-
-      dataArray.forEach((data) => {
-        
-        if (data.data.grandTotal !== 0) {
-          promises.push(
-            new Promise(async (resolve2, reject2) => {
-              const html = handlebars.compile(source)(data);
-              // Create a new PDF document in memory
-      
-              //Use storage bucket to save PDF
-              let statementPath = `${fileType}/${data.name} - ${data.month}.pdf`;
-              if (data.location) {
-                statementPath = `${fileType}/${data.name}: ${data.location.name} - ${data.month}`;
-              }
-              if (fileType === 'detailed-invoices') {
-                statementPath = `invoices/detailed/${data.name} - ${data.month}`;
-              }
-      
-              // Launch Puppeteer and generate PDF
-              const browser = await puppeteer.launch();
-              const page = await browser.newPage();
-              await page.setContent(html);
-
-              // Generate PDF buffer
-              const pdfBuffer = await page.pdf({
-                format: 'A4',
-                printBackground: true,
-                margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
-              });
-              await browser.close();
-
-              // Save the PDF to the Google Cloud Storage bucket
-              const statementPdfRef = bucket.file(statementPath);
-              const savePromise = statementPdfRef
-                .save(pdfBuffer)
-                .catch((e) => console.log(`Error saving PDF to bucket: ${e}`));
-                
-              savePromise.then(() => {
-                // Set metadata for the file in the bucket
-                bucket
-                  .file(statementPath)
-                  .setMetadata({
-                    contentType: 'application/pdf',
-                    metadata: {
-                      customer: data.name,
-                      retailer: data.name,
-                      date: data.month,
-                    },
-                  })
-                  .then(() => {
-                    const statement: Statement = {
-                      date: data.month,
-                      path: statementPath,
-                    };
-                    statements.push(statement);
-      
-                    // Handle saving to Firestore based on user type
-                    if (userType === 'admin') {
-                      if (data.retailerRef) {
-                        statement.retailerRef = data.retailerRef;
-                      }
-                      if (fileType === 'detailed-invoices') {
-                        resolve2(
-                          admin
-                            .firestore()
-                            .doc(`temp/${data.retailerRef.id}`)
-                            .set({
-                              detailedInvoices: statements,
-                            })
-                            .catch((e) => console.log(e)),
-                        );
-                      } else {
-                        resolve2(
-                          admin
-                            .firestore()
-                            .doc('admins/vaultwrx')
-                            .update({
-                              [fileType]: admin.firestore.FieldValue.arrayUnion(
-                                statement,
-                              ),
-                            })
-                            .then(() => console.log('success'))
-                            .catch((e) => console.log(`error ${e}`)),
-                        );
-                      }
-                    } else if (userType === 'retailer') {
-                      resolve2(
-                        data.retailerRef
-                          .update({
-                            [fileType]: admin.firestore.FieldValue.arrayUnion(
-                              statement,
-                            ),
-                          })
-                          .then(() => console.log('success'))
-                          .catch((err) => console.log(`error ${err}`)),
-                      );
-                    } else if (userType === 'customer') {
-                      resolve2(
-                        data.customerRef
-                          .update({
-                            statements: admin.firestore.FieldValue.arrayUnion(
-                              statement,
-                            ),
-                          })
-                          .then(() => console.log('success'))
-                          .catch((err) => console.log(`error ${err}`)),
-                      );
-                    }
-      
-                    console.log('PDF saved and metadata set in bucket');
-                  })
-                  .catch((err) => {
-                    console.log(`Error setting metadata in bucket: ${err}`);
-                    reject2(err);
-                  });
-              });
-    
-            }).catch((err) => console.log(err)),
-          );
-        }
-      });
-      return Promise.all(promises).catch((err) => console.log(err));
-    })
-    .catch((err) => console.log(err));
 }
 
 function generateStatementPDF(
@@ -638,7 +311,7 @@ export const generateRetailerStatements = (
 };
 
 export const generateAdminStatements = (inputDate: Date) => {
-  const date = moment(inputDate);
+  const date = moment(inputDate, 'MM/DD/YYYY');
   const customerQuery = admin.firestore().collection('customers');
   const retailerQuery = admin.firestore().collection('retailers');
   const orderQuery = admin
