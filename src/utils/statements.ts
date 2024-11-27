@@ -48,6 +48,32 @@ handlebars.registerHelper('currency', (number) => {
   return currencyFormatter.format(+numberString);
 });
 
+const Handlebars = require('handlebars');
+
+// Register a custom math helper
+Handlebars.registerHelper(
+  'math',
+  function (lvalue: any, operator: any, rvalue: any, options: any) {
+    lvalue = parseFloat(lvalue);
+    rvalue = parseFloat(rvalue);
+
+    switch (operator) {
+      case '+':
+        return lvalue + rvalue;
+      case '-':
+        return lvalue - rvalue;
+      case '*':
+        return lvalue * rvalue;
+      case '/':
+        return lvalue / rvalue;
+      case '%':
+        return lvalue % rvalue;
+      default:
+        throw new Error(`Unknown operator: ${operator}`);
+    }
+  },
+);
+
 export const sum = (result: number, item: number) => result + item;
 
 function formatRetailersForReport(array: StatementData[]) {
@@ -187,7 +213,8 @@ export const generateRetailerStatements = (
   inputDate: Date,
   retailerId: string,
 ) => {
-  const date = moment(inputDate);
+  const date = moment(inputDate, 'MM/DD/YYYY');
+
   const retailerRef = admin.firestore().collection('retailers').doc(retailerId);
   const customerQuery = admin
     .firestore()
@@ -451,7 +478,7 @@ export const generateCustomerStatements = (
   inputDate: Date,
   customerId: string,
 ) => {
-  const date = moment(inputDate);
+  const date = moment(inputDate, 'MM/DD/YYYY');
   const customerRef = admin.firestore().collection('customers').doc(customerId);
   const orderQuery = admin
     .firestore()
